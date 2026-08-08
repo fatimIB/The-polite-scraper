@@ -91,3 +91,44 @@ Cached catalogue pages are reused on subsequent runs, so the website is not cont
 ![Stage 2 — Three catalogue pages discovered](screenshots/pages-scapp.png)
 
 The result confirms that the scraper discovered exactly **60 unique book URLs across the first three catalogue pages**.
+
+### Stage 3 — Extract Raw Book Records 
+
+The 60 unique book URLs discovered in Stage 2 were used to fetch each book's detail page.
+
+Each detail page is:
+
+- fetched with the same identifying `User-Agent`
+- protected by a 10-second timeout
+- checked for an HTTP `200` response
+- delayed by at least `0.5` seconds before a real request
+- cached locally in `cache/details/`
+- parsed using Beautiful Soup
+
+The extractor targets the product section of each page rather than searching the entire HTML document.
+
+Each raw record contains:
+
+```json
+{
+  "title": "A Light in the Attic",
+  "product_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+  "price_text": "£51.77",
+  "availability_text": "In stock (22 available)",
+  "rating_text": "Three",
+  "description": "...",
+  "source_page": "https://books.toscrape.com/catalogue/page-1.html",
+  "fetched_at": "2026-08-08T15:28:34+00:00"
+}
+```
+
+The `description` field is allowed to be `null` when the page does not contain a description. No missing information is invented.
+
+The `source_page` and `fetched_at` fields provide provenance, showing where the book was discovered and when its detail page was fetched.
+
+
+**Screenshot:**
+
+![Stage 3 — Raw book extraction](screenshots/stage-3-extraction.png)
+
+![Stage 3 — Raw book extraction](screenshots/stage-3-extraction2.png)
