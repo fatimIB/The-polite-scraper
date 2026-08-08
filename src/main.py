@@ -33,6 +33,38 @@ class BookRecord(BaseModel):
     source_page: HttpUrl
     fetched_at: str
 
+def write_run_report(
+    start_time,
+    start_time_iso,
+    pages_fetched,
+    cache_hits,
+    valid_records,
+    invalid_records,
+    failed_pages
+):
+    duration = time.time() - start_time
+
+    report = {
+        "started_at": start_time_iso,
+        "duration_seconds": round(duration, 2),
+        "pages_fetched": pages_fetched,
+        "cache_hits": cache_hits,
+        "valid_records": valid_records,
+        "invalid_records": invalid_records,
+        "failed_pages": len(failed_pages)
+    }
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    report_file = OUTPUT_DIR / "run-report.json"
+
+    report_file.write_text(
+        json.dumps(report, indent=2),
+        encoding="utf-8"
+    )
+
+    print("\nRUN REPORT")
+    print(json.dumps(report, indent=2))
 
 
 def get_cache_file(page_number):
@@ -158,34 +190,72 @@ def fetch_detail_page(url, cache_file):
     if cache_file.exists():
         content = cache_file.read_bytes()
         print(f"CACHE HIT {cache_file.name} bytes={len(content)}")
-        return content
-
-    time.sleep(DELAY)
+        return content, "cache"
 
     headers = {
         "User-Agent": USER_AGENT
     }
 
-    response = requests.get(
-        url,
-        headers=headers,
-        timeout=TIMEOUT
-    )
+    for attempt in range(2):
+        time.sleep(DELAY)
 
-    if response.status_code != 200:
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=TIMEOUT
+            )
+
+        except requests.Timeout:
+            if attempt == 0:
+                print(f"TIMEOUT retrying url={url}")
+                time.sleep(1)
+                continue
+
+            raise RuntimeError(
+                f"Request timed out after retry: {url}"
+            )
+
+        except requests.RequestException as e:
+            raise RuntimeError(
+                f"Request failed: {url} - {e}"
+            )
+
+        # Successful request
+        if response.status_code == 200:
+            cache_file.write_text(
+                response.text,
+                encoding="utf-8"
+            )
+
+            print(
+                f"FETCH {cache_file.name} "
+                f"status={response.status_code} "
+                f"bytes={len(response.content)}"
+            )
+
+            return response.content, "fetched"
+
+        # Retry server errors once
+        if 500 <= response.status_code <= 599:
+            if attempt == 0:
+                print(
+                    f"SERVER ERROR status={response.status_code} "
+                    f"retrying url={url}"
+                )
+                time.sleep(1)
+                continue
+
+            raise RuntimeError(
+                f"Server error after retry: HTTP {response.status_code}"
+            )
+
+        # Do NOT retry 403, 404, etc.
         raise RuntimeError(
-            f"Failed to fetch {url}: HTTP {response.status_code}"
+            f"HTTP {response.status_code}: {url}"
         )
 
-    cache_file.write_text(response.text, encoding="utf-8")
-
-    print(
-        f"FETCH {cache_file.name} "
-        f"status={response.status_code} "
-        f"bytes={len(response.content)}"
-    )
-
-    return response.content
+    raise RuntimeError(f"Failed to fetch: {url}")
 
 
 def extract_book_record(html, product_url, source_page):
@@ -271,30 +341,53 @@ def extract_book_record(html, product_url, source_page):
 
 def extract_all_details(books):
     records = []
+    failed_pages = []
+    pages_fetched = 0
+    cache_hits = 0
 
     for index, book in enumerate(books, start=1):
 
-        html = fetch_detail_page(
-            book["url"],
-            get_detail_cache_file(index)
-        )
+        try:
+            html, source = fetch_detail_page(
+                book["url"],
+                get_detail_cache_file(index)
+            )
 
-        record = extract_book_record(
-            html,
-            book["url"],
-            book["source_page"]
-        )
+            if source == "cache":
+                cache_hits += 1
+            else:
+                pages_fetched += 1
 
-        records.append(record)
+            record = extract_book_record(
+                html,
+                book["url"],
+                book["source_page"]
+            )
 
-        if index == 1:
-            print("\nFIRST RAW RECORD:")
-            print(record)
-            print()
+            records.append(record)
+
+            if index == 1:
+                print("\nFIRST RAW RECORD:")
+                print(record)
+                print()
+
+        except Exception as e:
+            print(
+                f"FAILED book={index} "
+                f"url={book['url']} "
+                f"error={e}"
+            )
+
+            failed_pages.append({
+                "url": book["url"],
+                "error": str(e)
+            })
+
+            continue
 
     print(f"detail_pages={len(records)}")
 
-    return records
+    return records, failed_pages, pages_fetched, cache_hits
 
 def normalize_price(price_text):
     if not price_text:
@@ -351,15 +444,37 @@ def validate_and_store(records):
     print(f"valid_records={len(valid_records)}")
     print(f"invalid_records={len(errors)}")
 
+    return len(valid_records), len(errors)
+
 
 def main():
-    books = discover_books()
+    start_time = time.time()
+    start_time_iso = datetime.now(timezone.utc).isoformat()
 
-    records = extract_all_details(books)
+    books = discover_books()
+    # Stage 5 test: deliberately broken URL
+    books.append({
+        "url": "https://books.toscrape.com/catalogue/this-book-does-not-exist.html",
+        "source_page": START_URL
+    })
+
+    records, failed_pages, pages_fetched, cache_hits = extract_all_details(
+        books
+    )
 
     print(f"raw_records={len(records)}")
 
-    validate_and_store(records)
+    valid_records, invalid_records = validate_and_store(records)
+
+    write_run_report(
+        start_time,
+        start_time_iso,
+        pages_fetched,
+        cache_hits,
+        valid_records,
+        invalid_records,
+        failed_pages
+    )
 
 if __name__ == "__main__":
     main()

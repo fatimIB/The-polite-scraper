@@ -201,3 +201,118 @@ The number of records remained 60 instead of increasing to 120, confirming that 
 **Screenshot:**
 
 ![Stage 4 — validate](screenshots/stage-4.png)
+
+## Stage 5 — Survive Failures & Report the Run
+
+### Goal
+
+A single broken book page should not terminate the entire scraping job.
+
+This stage makes the scraper resilient to individual page failures and produces a run report containing honest execution statistics.
+
+### What was implemented
+
+#### 1. Per-page failure handling
+
+Each book detail page is processed independently.
+
+If one page fails, the scraper:
+
+- Logs the failed URL.
+- Records the error.
+- Skips the broken page.
+- Continues processing the remaining books.
+- Does not allow one failure to terminate the entire run.
+
+For example, a deliberately invalid URL was added for testing:
+
+```text
+FAILED book=61 url=https://books.toscrape.com/catalogue/this-book-does-not-exist.html error=HTTP 404
+```
+
+The scraper continued normally after the 404.
+
+#### 2. Retry policy
+
+Transient failures such as:
+
+- Request timeouts
+- HTTP 5xx server errors
+
+are suitable for a retry.
+
+Permanent client errors such as:
+
+- `403 Forbidden`
+- `404 Not Found`
+
+are not retried because repeating the request will not fix the problem.
+
+This keeps the scraper polite while still providing resilience against temporary server problems.
+
+#### 3. Run reporting
+
+At the end of each execution, the scraper generates:
+
+```text
+output/run-report.json
+```
+
+The report records:
+
+- `started_at`
+- `duration_seconds`
+- `pages_fetched`
+- `cache_hits`
+- `valid_records`
+- `invalid_records`
+- `failed_pages`
+
+Example report from the failure test:
+
+```json
+{
+  "started_at": "2026-08-08T16:10:14.251709+00:00",
+  "duration_seconds": 4.26,
+  "pages_fetched": 0,
+  "cache_hits": 60,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 1
+}
+```
+
+### Failure Test
+
+To verify that one bad page does not kill the run, a fake book URL was intentionally added to the discovered list.
+
+The scraper produced:
+
+```text
+FAILED book=61 ... HTTP 404
+detail_pages=60
+raw_records=60
+valid_records=60
+invalid_records=0
+failed_pages=1
+```
+
+This proves that the invalid page was isolated while the 60 valid records were successfully preserved.
+
+**Screenshot:**
+
+![Stage 5 — error](screenshots/error.png)
+
+### Caching
+
+The test also confirms that previously downloaded pages are reused:
+
+```text
+CACHE HIT book-1.html
+CACHE HIT book-2.html
+...
+CACHE HIT book-60.html
+```
+
+No unnecessary requests were made for cached pages.
+
