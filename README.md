@@ -67,3 +67,27 @@ This means subsequent development runs can use the cached HTML instead of repeat
 - Second run: `CACHE HIT`
 - Response size is reported
 - The full HTML is not printed to the terminal
+
+### Stage 2 — Discover the Three Catalogue Pages
+
+The scraper now parses the cached catalogue pages using **Beautiful Soup** and discovers the book links from each page.
+
+For each book, the relative URL is converted into an absolute URL using `urljoin()` rather than manually concatenating strings.
+
+The scraper follows the catalogue's own **Next** link to discover:
+
+- Catalogue page 1
+- Catalogue page 2
+- Catalogue page 3
+
+Each catalogue page contains 20 books, giving a total of **60 discovered book URLs**.
+
+The scraper also removes duplicate URLs before continuing to the next stage.
+
+Cached catalogue pages are reused on subsequent runs, so the website is not contacted unnecessarily during development.
+
+**Screenshot:**
+
+![Stage 2 — Three catalogue pages discovered](screenshots/pages-scapp.png)
+
+The result confirms that the scraper discovered exactly **60 unique book URLs across the first three catalogue pages**.
