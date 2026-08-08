@@ -132,3 +132,72 @@ The `source_page` and `fetched_at` fields provide provenance, showing where the 
 ![Stage 3 — Raw book extraction](screenshots/stage-3-extraction.png)
 
 ![Stage 3 — Raw book extraction](screenshots/stage-3-extraction2.png)
+
+### Stage 4 — Clean, Validate, and Store the Records
+
+The raw book records collected in Stage 3 were cleaned and validated before being stored.
+
+#### Normalize the Price
+
+The original `price_text` value is kept, while a numeric `price_gbp` field is added so the price can be processed programmatically.
+
+For example:
+
+```json
+{
+  "price_text": "£51.77",
+  "price_gbp": 51.77
+}
+```
+
+The absolute `product_url` is used as the unique identity of each book, preventing duplicate records.
+
+#### Validate with Pydantic
+
+A Pydantic schema defines the expected structure and types of each record.
+
+Each extracted record is validated before being stored. Invalid records are written to `output/errors.json` together with the reason for the validation failure.
+
+Valid records are written to:
+
+```text
+output/books.json
+```
+
+The resulting records contain the cleaned and validated data, including:
+
+- `title`
+- `product_url`
+- `price_text`
+- `price_gbp`
+- `availability_text`
+- `rating_text`
+- `description`
+- `source_page`
+- `fetched_at`
+
+#### Checkpoint
+
+The scraper successfully validated all 60 discovered books:
+
+```text
+detail_pages=60
+raw_records=60
+valid_records=60
+invalid_records=0
+```
+
+The scraper was then executed a second time to verify **idempotency**.
+
+After the second run:
+
+```text
+output/books.json → 60 records
+```
+
+The number of records remained 60 instead of increasing to 120, confirming that duplicate records are not created when the scraper is run again.
+
+
+**Screenshot:**
+
+![Stage 4 — validate](screenshots/stage-4.png)

@@ -4,6 +4,9 @@ from urllib.parse import urljoin
 import time
 import requests
 from bs4 import BeautifulSoup
+import json
+import re
+from pydantic import BaseModel, HttpUrl
 
 
 BASE_URL = "https://books.toscrape.com/"
@@ -14,6 +17,22 @@ CACHE_DIR = Path("cache")
 USER_AGENT = "FlyRankInternship A9/1.0 (https://github.com/fatimIB/The-polite-scraper)"
 TIMEOUT = 10
 DELAY = 0.5
+
+OUTPUT_DIR = Path("output")
+BOOKS_FILE = OUTPUT_DIR / "books.json"
+ERRORS_FILE = OUTPUT_DIR / "errors.json"
+
+class BookRecord(BaseModel):
+    title: str
+    product_url: HttpUrl
+    price_text: str
+    price_gbp: float
+    availability_text: str
+    rating_text: str | None
+    description: str | None
+    source_page: HttpUrl
+    fetched_at: str
+
 
 
 def get_cache_file(page_number):
@@ -277,6 +296,61 @@ def extract_all_details(books):
 
     return records
 
+def normalize_price(price_text):
+    if not price_text:
+        return None
+
+    cleaned = re.sub(r"[^\d.]", "", price_text)
+
+    return float(cleaned) if cleaned else None
+
+def normalize_record(record):
+    record["price_gbp"] = normalize_price(record["price_text"])
+
+    return record
+
+def validate_and_store(records):
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    valid_records = []
+    errors = []
+
+    seen_urls = set()
+
+    for record in records:
+        try:
+            record = normalize_record(record)
+
+            if record["product_url"] in seen_urls:
+                continue
+
+            seen_urls.add(record["product_url"])
+
+            validated = BookRecord(**record)
+
+            valid_records.append(
+                validated.model_dump(mode="json")
+            )
+
+        except Exception as e:
+            errors.append({
+                "record": record,
+                "reason": str(e)
+            })
+
+    BOOKS_FILE.write_text(
+        json.dumps(valid_records, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
+
+    ERRORS_FILE.write_text(
+        json.dumps(errors, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
+
+    print(f"valid_records={len(valid_records)}")
+    print(f"invalid_records={len(errors)}")
+
 
 def main():
     books = discover_books()
@@ -285,6 +359,7 @@ def main():
 
     print(f"raw_records={len(records)}")
 
+    validate_and_store(records)
 
 if __name__ == "__main__":
     main()
