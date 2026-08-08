@@ -30,3 +30,40 @@ The URL returned **404 Not Found**, meaning that no `robots.txt` file was found 
 A missing `robots.txt` file is not treated as permission to scrape other websites. This assignment is limited to Books to Scrape because it is explicitly provided as a scraping practice sandbox.
 
 > I will not reuse this code on another site without checking its rules and terms first.
+
+## Stage 1 — Fetch and Cache HTML
+
+The first catalogue page was fetched using a polite HTTP request with:
+
+- An identifying `User-Agent`
+- A request timeout
+- Status-code validation
+- A local cache to avoid repeatedly requesting the website during development
+
+The first run fetched the page successfully:
+
+```text
+FETCH status=200 bytes=50469
+```
+
+The HTML was then saved to:
+
+```text
+cache/catalogue-page-1.html
+```
+
+On the second run, the scraper detected the cached page and did not make another request to the website:
+
+```text
+CACHE HIT bytes=52751
+```
+
+This means subsequent development runs can use the cached HTML instead of repeatedly requesting the live site.
+
+### Checkpoint
+
+- First run: `FETCH` with HTTP `200`
+- HTML successfully cached locally
+- Second run: `CACHE HIT`
+- Response size is reported
+- The full HTML is not printed to the terminal
