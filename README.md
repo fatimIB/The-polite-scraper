@@ -316,3 +316,151 @@ CACHE HIT book-60.html
 
 No unnecessary requests were made for cached pages.
 
+## Stage 6 — Publish Scraper Evidence
+
+### Reproducibility
+
+The scraper is packaged so that another developer can clone the repository, install the required Python dependencies, and run the scraper with a single command.
+
+### Installation
+
+Clone the repository and enter the project directory:
+
+```bash
+git clone https://github.com/fatimIB/The-polite-scraper
+cd The-polite-scraper
+```
+
+Install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run
+
+Run the scraper with:
+
+```bash
+python src/main.py
+```
+
+The scraper produces:
+
+```text
+output/
+├── books.json
+├── errors.json
+└── run-report.json
+```
+
+The cache is stored locally under:
+
+```text
+cache/
+```
+
+and is excluded from version control using `.gitignore`.
+
+### Record Schema
+
+Each validated book record follows this structure:
+
+```json
+{
+  "title": "A Light in the Attic",
+  "product_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+  "price_text": "£51.77",
+  "price_gbp": 51.77,
+  "availability_text": "In stock (22 available)",
+  "rating_text": "Three",
+  "description": "...",
+  "source_page": "https://books.toscrape.com/catalogue/page-1.html",
+  "fetched_at": "2026-08-08T15:28:34+00:00"
+}
+```
+
+The schema is enforced with Pydantic before records are written to `output/books.json`.
+
+### Politeness Rules
+
+The scraper follows several rules to reduce unnecessary load on the target website:
+
+- **User-Agent:** requests identify the scraper with a descriptive `User-Agent`.
+- **Timeout:** HTTP requests use a 10-second timeout so they never wait indefinitely.
+- **Delay:** real requests to the website are separated by at least 0.5 seconds.
+- **Caching:** downloaded catalogue and book pages are stored locally and reused during development.
+- **Status checking:** only successful HTTP responses are parsed.
+- **No unnecessary requests:** cached pages are never requested again.
+
+### Browser Decision
+
+A browser was not necessary for this assignment because the required data is already present in the HTML returned by the server. Browser automation would therefore add complexity and cost without providing additional information.
+
+### Limitation
+
+This scraper is intentionally limited to the first three catalogue pages and therefore collects only 60 books. It is not designed to crawl the entire Books to Scrape catalogue.
+
+Another limitation is that the scraper depends on the current HTML structure of the website. If the site's markup or CSS selectors change, the extraction logic may need to be updated.
+
+### Ethics
+
+This project is intended for a public scraping sandbox and follows a conservative approach to web scraping.
+
+When an official API exists, it should be preferred over scraping. The scraper does not attempt to bypass logins, paywalls, access controls, or blocks. It collects only the information required for the assignment and avoids unnecessary requests through caching and request delays.
+
+### Final Evidence
+
+A final run produces a `run-report.json` containing the execution statistics.
+
+Example:
+
+```json
+{
+  "started_at": "...",
+  "duration_seconds": 4.26,
+  "pages_fetched": 0,
+  "cache_hits": 60,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 1
+}
+```
+
+The final output should contain exactly:
+
+```text
+60 validated book records
+```
+
+and the run report should confirm:
+
+```text
+valid_records = 60
+failed_pages = 1
+```
+
+The Stage 5 failure test separately demonstrated that an intentionally invalid page does not terminate the run and is reported as a failed page.
+
+### Project Structure
+
+```text
+The-polite-scraper/
+│
+├── src/
+│   └── main.py
+│
+├── output/
+│   ├── books.json
+│   ├── errors.json
+│   └── run-report.json
+│
+├── cache/   # ignored by Git
+│
+├── screenshots/                 
+│
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
+
